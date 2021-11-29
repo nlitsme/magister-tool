@@ -39,9 +39,10 @@ class Magister:
     """
     def __init__(self, args):
         self.args = args
-        self.xsrftoken = None
-        self.access_token = None
+        self.xsrftoken = args.xsrftoken
+        self.access_token = args.accesstoken
         self.magisterserver = args.magisterserver
+        self.schoolserver = args.schoolserver
         self.cj = http.cookiejar.CookieJar()
         handlers = [urllib.request.HTTPCookieProcessor(self.cj)]
         if args.debug:
@@ -138,7 +139,7 @@ class Magister:
 
         return self.args.authcode
 
-    def extract_oidc_config(self, js, site):
+    def extract_oidc_config(self, js):
         """
         Decode the javascript containing the oidc config.
         """
@@ -147,7 +148,7 @@ class Magister:
             if not line: continue
             if m := re.match(r'\s*(\w+):\s*(.*),?$', line):
                 key, value = m.groups()
-                value = re.sub(r'\' \+ window\.location\.hostname', f"{site}'", value)
+                value = re.sub(r'\' \+ window\.location\.hostname', f"{self.schoolserver}'", value)
                 value = re.sub(r'\' \+ \'', "", value)
                 if value == 'false':
                     value = False
@@ -159,30 +160,29 @@ class Magister:
 
         return cfg
 
-    def login(self, site, username, password):
+    def login(self, username, password):
         """
-        Authenticate to the magister server for school 'site', using username and password.
+        Authenticate to the magister server using username and password.
         """
         openidcfg = self.httpreq(f"https://{self.magisterserver}/.well-known/openid-configuration")
         if not openidcfg:
             print("could not get magister openid config")
             return
-        oidcjs = self.httpreq(f"https://{site}/oidc_config.js")
+        oidcjs = self.httpreq(f"https://{self.schoolserver}/oidc_config.js")
         if not oidcjs:
             print("could not get school config")
             return
-        oidccfg = self.extract_oidc_config(oidcjs.decode('utf-8'), site)
+        oidccfg = self.extract_oidc_config(oidcjs.decode('utf-8'))
 
         params = dict(
-            client_id= oidccfg["client_id"],         # f"M6-{site}"
-            redirect_uri= oidccfg["redirect_uri"],   # f"https://{site}/oidc/redirect_callback.html",
+            client_id= oidccfg["client_id"],         # f"M6-{self.schoolserver}"
+            redirect_uri= oidccfg["redirect_uri"],   # f"https://{self.schoolserver}/oidc/redirect_callback.html",
             response_type= oidccfg["response_type"], # "id_token token",
             scope= "openid profile",
             state= "11111111111111111111111111111111",
             nonce= "11111111111111111111111111111111",
-            acr_values= oidccfg["acr_values"],       # f"tenant:{site}",
+            acr_values= oidccfg["acr_values"],       # f"tenant:{self.schoolserver}",
         )
-        self.schoolserver = site
 
         self.logprint("\n---- auth ----")
 
@@ -249,6 +249,8 @@ class Magister:
         d = urllib.parse.parse_qs(qs)
         self.logprint(d)
         self.access_token = d["access_token"][0]
+        if self.args.verbose:
+            print(f" -> access = {self.access_token}")
 
         return True
 
@@ -382,8 +384,13 @@ def main():
     parser.add_argument('--rooster', '-r', action='store_true', help='output rooster')
     parser.add_argument('--absenties', '-A', action='store_true', help='output absenties')
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
+    parser.add_argument('--get', help='get data from magister')
     parser.add_argument('--config', help='specify configuration file.')
     parser.add_argument('--verbose', action='store_true')
+
+    # 'internal' options.
+    parser.add_argument('--xsrftoken')
+    parser.add_argument('--accesstoken')
     parser.add_argument('--username')
     parser.add_argument('--password')
     parser.add_argument("--authcode")
@@ -410,8 +417,15 @@ def main():
         print("config: %s" % e)
 
     mg = Magister(args)
-    if not mg.login(args.schoolserver, args.username, args.password):
-        print("Login failed")
+
+    if not args.accesstoken:
+        if not mg.login(args.username, args.password):
+            print("Login failed")
+            return
+
+    if args.get is not None:
+        d = mg.req(args.get)
+        print(d)
         return
 
     d = mg.req("account")
