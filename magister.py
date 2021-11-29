@@ -3,6 +3,7 @@ import urllib.request
 import urllib.parse
 import http.cookiejar
 import json
+import datetime
 
 def dehtml(html):
     """
@@ -16,13 +17,20 @@ def dehtml(html):
     html = re.sub(r"&amp;", "&", html)
     return html
 
-def datum(t):
+def datum(ts):
     """
     Strip the date's to a more reasonable string.
     """
-    if not t:
+    if not ts:
         return "?"
-    return t[:19]
+    if m := re.split(r"[-T:Z.]", ts):
+        y, m, d, H, M, S, us = map(int, m[:-1])
+        localtz = datetime.datetime(y, m, d, H, M, S).astimezone().tzinfo
+        t = datetime.datetime(y, m, d, H, M, S, tzinfo=datetime.timezone.utc)
+        t = t.astimezone(localtz)
+        return f"{t:%Y-%m-%d %H:%M:%S}"
+
+    return ts[:19]
 
 
 class Magister:
