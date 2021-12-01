@@ -1,9 +1,11 @@
+#!/usr/bin/python3
 import re
 import urllib.request
 import urllib.parse
 import http.cookiejar
 import json
-import datetime
+from datetime import datetime, timezone, timedelta
+import binascii
 
 def dehtml(html):
     """
@@ -25,12 +27,17 @@ def datum(ts):
         return "?"
     if m := re.split(r"[-T:Z.]", ts):
         y, m, d, H, M, S, us = map(int, m[:-1])
-        localtz = datetime.datetime(y, m, d, H, M, S).astimezone().tzinfo
-        t = datetime.datetime(y, m, d, H, M, S, tzinfo=datetime.timezone.utc)
+        localtz = datetime(y, m, d, H, M, S).astimezone().tzinfo
+        t = datetime(y, m, d, H, M, S, tzinfo=timezone.utc)
         t = t.astimezone(localtz)
         return f"{t:%Y-%m-%d %H:%M:%S}"
 
     return ts[:19]
+
+def utctime(ts):
+    if m := re.split(r"[-T:Z.]", ts):
+        y, m, d, H, M, S = map(int, m[:-1])
+        return datetime(y, m, d, H, M, S, tzinfo=timezone.utc)
 
 
 class Magister:
@@ -374,6 +381,32 @@ def applyconfig(cfg, args):
     if not args.authcode:
         args.authcode = cfg.get('root', 'authcode')
 
+def apply_auth_config(cfg, args):
+    if args.accesstoken:
+        return
+    exptime = utctime(cfg.get('root', 'expires'))
+    if not exptime:
+        return
+    now = datetime.now().astimezone(timezone.utc)
+    if exptime < now - timedelta(minutes=5):
+        return
+    args.accesstoken = cfg.get('root', 'accesstoken')
+
+def store_access_token(cache, token):
+    now = datetime.now().astimezone()
+    f = token.split(".")
+    if len(f)>=2:
+        j = json.loads(binascii.a2b_base64(f[1]))
+        exp = datetime.fromtimestamp(j["exp"], tz=now.tzinfo)
+    else:
+        exp = now + timedelta(hours=1)
+
+    exp = exp.astimezone(timezone.utc)
+
+    with open(cache, "w+") as fh:
+        print(f"expires={exp:%Y-%m-%dT%H:%M:%SZ}", file=fh)
+        print(f"accesstoken={token}", file=fh)
+
 
 def main():
     import argparse
@@ -386,6 +419,7 @@ def main():
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
     parser.add_argument('--get', help='get data from magister')
     parser.add_argument('--config', help='specify configuration file.')
+    parser.add_argument('--cache', help='specify the magister access-token cache file.')
     parser.add_argument('--verbose', action='store_true')
 
     # 'internal' options.
@@ -408,6 +442,10 @@ def main():
         import os
         homedir = os.environ['HOME']
         args.config = os.path.join(homedir, ".magisterrc")
+    if not args.cache:
+        import os
+        homedir = os.environ['HOME']
+        args.cache = os.path.join(homedir, ".magister_auth_cache")
 
     try:
         cfg = loadconfig(args.config)
@@ -416,12 +454,20 @@ def main():
     except Exception as e:
         print("config: %s" % e)
 
+    try:
+        acfg = loadconfig(args.cache)
+
+        apply_auth_config(acfg, args)
+    except Exception as e:
+        print("cache: %s" % e)
+
     mg = Magister(args)
 
     if not args.accesstoken:
         if not mg.login(args.username, args.password):
             print("Login failed")
             return
+        store_access_token(args.cache, mg.access_token)
 
     if args.get is not None:
         d = mg.req(args.get)
