@@ -294,6 +294,8 @@ class Magister:
         """
         request the link specified in the 'link' dictionary.
         """
+        if not link:
+            return
         return self.httpreq(f"https://{self.schoolserver}{link['href']}")
 
 
@@ -301,11 +303,6 @@ def printcijfers(c):
     print("-- cijfers --")
     for item in c["items"]:
         print("%s - %-3s %-6s x %3.1f - %s" % (datum(item["ingevoerdOp"]), item["vak"]["code"], item["waarde"], item["weegfactor"], item["omschrijving"]))
-
-def printvoortgang(v):
-    print("-- voortgang --")
-    for item in v["items"]:
-        print("%s - %-8s %-6s x %3.1f - %s" % (datum(item["ingevoerdOp"]), item["kolom"]["naam"], item["waarde"], item["kolom"]["weegfactor"], item["kolom"]["omschrijving"]))
 
 def printopdrachten(x):
     print("-- opdrachten --")
@@ -417,6 +414,7 @@ def main():
     parser.add_argument('--rooster', '-r', action='store_true', help='output rooster')
     parser.add_argument('--absenties', '-A', action='store_true', help='output absenties')
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
+    parser.add_argument('--opdrachten', '-O', action='store_true', help='output opdrachten/activiteiten/projecten')
     parser.add_argument('--get', help='get data from magister')
     parser.add_argument('--config', help='specify configuration file.')
     parser.add_argument('--cache', help='specify the magister access-token cache file.')
@@ -437,6 +435,7 @@ def main():
         args.rooster = True
         args.absenties = True
         args.studiewijzer = True
+        args.opdrachten = True
 
     if not args.config:
         import os
@@ -491,16 +490,22 @@ def main():
             if c["links"].get("voortgangscijfers"):
                 v = mg.getlink(c["links"]["voortgangscijfers"])
                 print("-- voortgang --")
-                printvoortgang(v)
+                for item in v["items"]:
+                    info = mg.getlink(item['links'].get('werkinformatie'))
+                    afgenomenop = info.get("afgenomenOp") if info else None
+                    weegfactor = info.get('weegfactor', '') if info else ''
+                    weegfactor = f"{weegfactor:3.1f}" if weegfactor else f"k:{item['kolom']['weegfactor']:3.1f}"
+                    print("%-10s %s - %-8s %-6s x %5s - %s ; %s" % (afgenomenop or "", datum(item["ingevoerdOp"]), item["kolom"]["naam"], item["waarde"], weegfactor, item["kolom"]["omschrijving"], info.get('omschrijving', '') if info else ''))
 
-        x = mg.req("personen", kindid, "opdrachten")
-        printopdrachten(x)
+        if args.opdrachten:
+            x = mg.req("personen", kindid, "opdrachten")
+            printopdrachten(x)
 
-        x = mg.req("leerlingen", kindid, "projecten")
-        printprojecten(x)
+            x = mg.req("leerlingen", kindid, "projecten")
+            printprojecten(x)
 
-        x = mg.req("personen", kindid, "activiteiten")
-        printactiviteiten(x)
+            x = mg.req("personen", kindid, "activiteiten")
+            printactiviteiten(x)
 
         if args.absenties:
             x = mg.req("personen", kindid, "absentieperioden")
