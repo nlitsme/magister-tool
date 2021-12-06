@@ -332,22 +332,44 @@ def printactiviteiten(x):
     for item in x["Items"]:
         print("%s ; %s - %s" % (datum(item["ZichtbaarVanaf"]), datum(item["ZichtbaarTotEnMet"]), item["Titel"]))
 
+def infotstr(t):
+    typenames = ["", "hw", "T!", "TT", "SO", "MO", "in", "aa"]
+    if 0 <= t < len(typenames): return typenames[t]
+    return "??"
+
 def printafspraken(x):
     print("-- afspraken --")
     for item in x["Items"]:
-        print("%s ; %s - %s ; %s" % (datum(item["Start"]), datum(item["Einde"]), item["Lokatie"], item["Omschrijving"]))
+        """
+        Type: 1:"Persoonlijk", 2:"Algemeen", 3:"Schoolbreed", 4:"Stage", 5:"Intake", 6:"Roostervrij", 7:"Kwt", 8:"Standby", 9:"Blokkade",
+             10:"Overig", 11:"BlokkadeLokaal", 12:"BlokkadeKlas", 13:"Les", 14:"Studiehuis", 15:"RoostervrijeStudie", 16:"Planning",
+             101:"Maatregelen", 102:"Presenties", 103:"ExamenRooster"
+        Status 1:automatisch, 3:gewijziged, 7:afgesloten. ...
+        Infotype 1: 'Huiswerk'  2:'Proefwerk', 3:Tentamen, 4:SchriftelijkeOverhoring, 5:MondelingeOverhoring, 6:Informatie, 7:Aantekening
+        """
+
+        print("%s ; %s <%2s> %s ; %s" % (datum(item["Start"]), datum(item["Einde"]), infotstr(item["InfoType"]), item["Lokatie"], item["Omschrijving"]))
         if item["Inhoud"]:
             print(dehtml(item["Inhoud"]))
 
 def printwijzigingen(x):
     print("-- roosterwijzigingen --")
     for item in x["Items"]:
-        print("%s ; %s - %s ; %s" % (datum(item["Start"]), datum(item["Einde"]), item["Lokatie"], item["Omschrijving"]))
+        print("%s ; %s <%2s> %s ; %s" % (datum(item["Start"]), datum(item["Einde"]), infotstr(item["InfoType"]), item["Lokatie"], item["Omschrijving"]))
         if item["Inhoud"]:
             print(dehtml(item["Inhoud"]))
 
 def printstudiewijzer(x):
     print("-- studiewijzer %s - %s ; %s" % (datum(x["Van"]), datum(x["TotEnMet"]), x["Titel"]))
+
+
+def print_jaar_cijfers(mg, v):
+    for item in v["items"]:
+        info = mg.getlink(item['links'].get('werkinformatie'))
+        afgenomenop = info.get("afgenomenOp") if info else None
+        weegfactor = info.get('weegfactor', '') if info else ''
+        weegfactor = f"{weegfactor:3.1f}" if weegfactor else f"k:{item['kolom']['weegfactor']:3.1f}"
+        print("%-10s %s - %-8s %-6s x %5s - %s ; %s" % (afgenomenop or "", datum(item["ingevoerdOp"]), item["kolom"]["naam"], item["waarde"], weegfactor, item["kolom"]["omschrijving"], info.get('omschrijving', '') if info else ''))
 
 
 def loadconfig(cfgfile):
@@ -411,6 +433,7 @@ def main():
     parser.add_argument('--debug', '-d', action='store_true', help='print all intermediate steps')
     parser.add_argument('--all', '-a', action='store_true', help='output all info')
     parser.add_argument('--cijfers', '-c', action='store_true', help='output cijfers')
+    parser.add_argument('--allejaren', action='store_true', help='output cijfers of all years')
     parser.add_argument('--rooster', '-r', action='store_true', help='output rooster')
     parser.add_argument('--absenties', '-A', action='store_true', help='output absenties')
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
@@ -483,19 +506,20 @@ def main():
         kindid = kind["Id"]
         x = mg.req("personen", kindid, "aanmeldingen")
         printaanmeldingen(x)
+        if args.allejaren:
+            for meld in x["Items"]:
+                v = mg.req('aanmeldingen', meld['Id'], 'cijfers')
+                print(f"-- cijfers {meld['Lesperiode']} : {meld['Studie']['Omschrijving']} --")
+                print_jaar_cijfers(mg, v)
+
 
         if args.cijfers:
             c = mg.req("personen", kindid, "cijfers", "laatste", dict(top=50))
             printcijfers(c)
-            if c["links"].get("voortgangscijfers"):
+            if c["links"].get("voortgangscijfers"):   # --> 'aanmeldingen', meldid, 'cijfers'
                 v = mg.getlink(c["links"]["voortgangscijfers"])
                 print("-- voortgang --")
-                for item in v["items"]:
-                    info = mg.getlink(item['links'].get('werkinformatie'))
-                    afgenomenop = info.get("afgenomenOp") if info else None
-                    weegfactor = info.get('weegfactor', '') if info else ''
-                    weegfactor = f"{weegfactor:3.1f}" if weegfactor else f"k:{item['kolom']['weegfactor']:3.1f}"
-                    print("%-10s %s - %-8s %-6s x %5s - %s ; %s" % (afgenomenop or "", datum(item["ingevoerdOp"]), item["kolom"]["naam"], item["waarde"], weegfactor, item["kolom"]["omschrijving"], info.get('omschrijving', '') if info else ''))
+                print_jaar_cijfers(mg, v)
 
         if args.opdrachten:
             x = mg.req("personen", kindid, "opdrachten")
