@@ -33,16 +33,29 @@ Usage
       --debug, -d           print all intermediate steps
       --all, -a             output all info
       --cijfers, -c         output cijfers
+      --allejaren           output cijfers of all years
       --rooster, -r         output rooster
       --absenties, -A       output absenties
       --studiewijzer, -s    output studiewijzer
+      --opdrachten, -O      output opdrachten/activiteiten/projecten
+      --get GET             get data from magister
       --config CONFIG       specify configuration file.
+      --cache CACHE         specify the magister access-token cache file.
       --verbose
+      --xsrftoken XSRFTOKEN
+      --accesstoken ACCESSTOKEN
       --username USERNAME
       --password PASSWORD
       --authcode AUTHCODE
       --schoolserver SCHOOLSERVER
       --magisterserver MAGISTERSERVER
+
+
+TODO
+====
+
+ * Optie om rooster van eerdere datums terug te kijken.
+
 
 
 Author: Willem Hengeveld <itsme@xs4all.nl>
