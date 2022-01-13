@@ -562,6 +562,21 @@ def main():
                         uri = b["Uri"] or f"attachment: {b['ContentType']}"
                         print(f" - {b['Naam']} ; {uri}")
                 print()
+            prjlist = mg.req("leerlingen", kindid, "projecten")
+            for prj in prjlist["Items"]:
+                prjdetail = mg.req("leerlingen", kindid, "projecten", prj["Id"])
+                print("-- projectwijzer ; %s ; %s - %s" % (datum(prj["Van"]), datum(prj["TotEnMet"]), prj["Titel"]))
+                for o in prjdetail["Onderdelen"]["Items"]:
+                    try:
+                        z = mg.req("leerlingen", kindid, "projecten", prj["Id"], "onderdelen", o["Id"], dict(gebruikMappenStructuur=True))
+                        print(f"{z['Titel']}\n{dehtml(z['Omschrijving'])}")
+                        for b in z["Bronnen"]:
+                            uri = b["Uri"] or f"attachment: {b['ContentType']}"
+                            print(f" - {b['Naam']} ; {uri}")
+                    except urllib.error.HTTPError as e:
+                        print(o['Titel'], e)
+
+                print()
 
         print()
 
