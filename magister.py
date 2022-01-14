@@ -81,9 +81,14 @@ class Magister:
         kwargs = dict()
         if data:
             kwargs["data"] = data
-        response = self.opener.open(req, **kwargs)
+        try:
+            response = self.opener.open(req, **kwargs)
+        except urllib.error.HTTPError as e:
+            self.logprint("!", str(e))
+            response = e
+
         data = response.read()
-        if response.headers.get("content-type").find("application/json")>=0:
+        if response.headers.get("content-type", '').find("application/json")>=0:
             js = json.loads(data)
             self.logprint(js)
             self.logprint()
@@ -239,15 +244,28 @@ class Magister:
 
         self.logprint("\n---- username ----")
         r = self.httpreq(f"https://{self.magisterserver}/challenges/username", json.dumps(d))
-        # r.action == password
-        # r.username = ...
+        # r.action == password  || 
+        #                       || r.error = 'InvalidUsername'
+        # r.username = ...      
+        if r['error']:
+            print("ERROR '%s'" % r['error'])
+            return
+
 
         d["password"] = password
 
         self.logprint("\n---- password ----")
         r = self.httpreq(f"https://{self.magisterserver}/challenges/password", json.dumps(d))
-        # r.action == null 
-        # r.redirectURL= ...
+        # r.action == None    || r.action == "changepassword"  || r.action == None
+        # r.redirectURL= ...  || r.redirectURL==None           || r.redirectURL==None
+        #                                                      || r.error == "InvalidUsernameOrPassword"
+
+        if not r['redirectURL'] or r['error']:
+            if r['action']:
+                print("'%s' requested -> visit website" % r['action'])
+                return
+            print("ERROR '%s'" % r['error'])
+            return
 
         self.logprint("\n---- callback ----")
         url, html = self.httpredirurl(f"https://{self.magisterserver}" + r["redirectURL"])
