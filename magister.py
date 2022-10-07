@@ -39,6 +39,15 @@ def utctime(ts):
         y, m, d, H, M, S = map(int, m[:-1])
         return datetime(y, m, d, H, M, S, tzinfo=timezone.utc)
 
+def ymd(years=0, days=0, weeks=0):
+    t = datetime.now()
+    if years:
+        t += timedelta(days=365*years)
+    elif days:
+        t += timedelta(days=days)
+    elif weeks:
+        t += timedelta(weeks=weeks)
+    return "%04d-%02d-%02d" % (t.year, t.month, t.day)
 
 class Magister:
     """
@@ -141,7 +150,7 @@ class Magister:
         The other kind is not handled (yet), which stores the parts of the authcode
         string in separate variables and then using those vars instead of literal strings in the 'n' Array.
         """
-        if m := re.search(r'\(n=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
+        if m := re.search(r'\([nr]=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
             codes = m.group(1).split('","')
             idxes = [int(_) for _ in m.group(2).split('","')]
 
@@ -552,14 +561,14 @@ def main():
         if args.absenties:
             x = mg.req("personen", kindid, "absentieperioden")
             print("ap:", x)
-            x = mg.req("personen", kindid, "absenties", dict(van="2016-01-01", tot="2026-01-01"))
+            x = mg.req("personen", kindid, "absenties", dict(van=ymd(years=-8), tot=ymd(years=+1)))
             printabsenties(x)
 
         if args.rooster:
-            x = mg.req("personen", kindid, "afspraken")
+            x = mg.req("personen", kindid, "afspraken", dict(van=ymd(), tot=ymd(weeks=+3)))
             printafspraken(x)
 
-            x = mg.req("personen", kindid, "roosterwijzigingen")
+            x = mg.req("personen", kindid, "roosterwijzigingen", dict(van=ymd(), tot=ymd(weeks=+3)))
             printwijzigingen(x)
 
         x = mg.req("personen", kindid, "mededelingen")
