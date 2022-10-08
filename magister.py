@@ -12,6 +12,10 @@ def dehtml(html):
     convert html to somewhat readable text.
     """
     html = re.sub(r"</p>|<br>", "\n", html)
+    html = re.sub(r"</td>\s*<td[^>]*>", "\t", html)
+    html = re.sub(r"</tr>", "\n", html)
+    html = re.sub(r"<\w[^<>]*\shref=([^<> ]+)[^<>]>", lambda m:m[1], html)
+    html = re.sub(r"<\w[^<>]*\ssrc=([^<> ]+)[^<>]>", lambda m:m[1], html)
     html = re.sub(r"</?\w+[^>]*>", "", html)
     html = re.sub(r"&nbsp;", " ", html)
     html = re.sub(r"&gt;", ">", html)
