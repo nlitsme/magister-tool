@@ -12,15 +12,21 @@ def dehtml(html):
     convert html to somewhat readable text.
     """
     html = re.sub(r"</p>|<br>", "\n", html)
-    html = re.sub(r"</td>\s*<td[^>]*>", "\t", html)
+    html = re.sub(r"</td>\s*<td[^<>]*>", "\t", html)
     html = re.sub(r"</tr>", "\n", html)
-    html = re.sub(r"<\w[^<>]*\shref=([^<> ]+)[^<>]>", lambda m:m[1], html)
-    html = re.sub(r"<\w[^<>]*\ssrc=([^<> ]+)[^<>]>", lambda m:m[1], html)
-    html = re.sub(r"</?\w+[^>]*>", "", html)
+    # special handling for <a href>: description first, then link.
+    html = re.sub(r"<a[^<>]*\shref=([^<> ]+)[^<>]*>([^<>]*)</\s*a\s*>", lambda m:m[2]+' '+m[1]+' ', html, re.DOTALL)
+    html = re.sub(r"<\w[^<>]*\shref=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, re.DOTALL)
+    html = re.sub(r"<\w[^<>]*\ssrc=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, re.DOTALL)
+    html = re.sub(r"</?\w+[^<>]*>", "", html)
     html = re.sub(r"&nbsp;", " ", html)
+    html = re.sub(r"\u00a0", " ", html)
     html = re.sub(r"&gt;", ">", html)
     html = re.sub(r"&lt;", "<", html)
     html = re.sub(r"&amp;", "&", html)
+    # remove repeating links
+    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, re.DOTALL)
+    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, re.DOTALL)
     return html
 
 def datum(ts):
@@ -38,12 +44,18 @@ def datum(ts):
 
     return ts[:19]
 
+def ymd(ts):
+    """
+    Return just the date
+    """
+    return datum(ts)[:9]
+
 def utctime(ts):
     if m := re.split(r"[-T:Z.]", ts):
         y, m, d, H, M, S = map(int, m[:-1])
         return datetime(y, m, d, H, M, S, tzinfo=timezone.utc)
 
-def ymd(years=0, days=0, weeks=0):
+def deltaymd(years=0, days=0, weeks=0):
     t = datetime.now()
     if years:
         t += timedelta(days=365*years)
@@ -457,6 +469,10 @@ def store_access_token(cache, token):
         print(f"expires={exp:%Y-%m-%dT%H:%M:%SZ}", file=fh)
         print(f"accesstoken={token}", file=fh)
 
+def getLink(props, name):
+    for l in props.get("Links", []):
+        if get(l, 'Rel') == name:
+            return get(l, 'Href')
 
 def main():
     import argparse
@@ -469,6 +485,7 @@ def main():
     parser.add_argument('--absenties', '-A', action='store_true', help='output absenties')
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
     parser.add_argument('--opdrachten', '-O', action='store_true', help='output opdrachten/activiteiten/projecten')
+    parser.add_argument('--attachments', action='store_true', help='print links to attachments')
     parser.add_argument('--get', help='get data from magister')
     parser.add_argument('--config', help='specify configuration file.')
     parser.add_argument('--cache', help='specify the magister access-token cache file.')
@@ -565,14 +582,14 @@ def main():
         if args.absenties:
             x = mg.req("personen", kindid, "absentieperioden")
             print("ap:", x)
-            x = mg.req("personen", kindid, "absenties", dict(van=ymd(years=-8), tot=ymd(years=+1)))
+            x = mg.req("personen", kindid, "absenties", dict(van=deltaymd(years=-8), tot=deltaymd(years=+1)))
             printabsenties(x)
 
         if args.rooster:
-            x = mg.req("personen", kindid, "afspraken", dict(van=ymd(), tot=ymd(weeks=+3)))
+            x = mg.req("personen", kindid, "afspraken", dict(van=deltaymd(), tot=deltaymd(weeks=+3)))
             printafspraken(x)
 
-            x = mg.req("personen", kindid, "roosterwijzigingen", dict(van=ymd(), tot=ymd(weeks=+3)))
+            x = mg.req("personen", kindid, "roosterwijzigingen", dict(van=deltaymd(), tot=deltaymd(weeks=+3)))
             printwijzigingen(x)
 
         x = mg.req("personen", kindid, "mededelingen")
@@ -591,7 +608,10 @@ def main():
                     print(f"{z['Titel']}\n{dehtml(z['Omschrijving'])}")
                     for b in z["Bronnen"]:
                         uri = b["Uri"] or f"attachment: {b['ContentType']}"
-                        print(f" - {b['Naam']} ; {uri}")
+                        print(f" - {ymd(b.get('Zichtbaar'))} {b['Naam']} ; {uri}")
+                        if args.attachments and b["BronSoort"] != 3:
+                            bi = mg.req("leerlingen", kindid, "studiewijzers", sw["Id"], "onderdelen", o["Id"], "bijlagen", b["Id"], {'redirect_type':'body'})
+                            print(bi['location'])
                 print()
             prjlist = mg.req("leerlingen", kindid, "projecten")
             for prj in prjlist["Items"]:
@@ -603,7 +623,11 @@ def main():
                         print(f"{z['Titel']}\n{dehtml(z['Omschrijving'])}")
                         for b in z["Bronnen"]:
                             uri = b["Uri"] or f"attachment: {b['ContentType']}"
-                            print(f" - {b['Naam']} ; {uri}")
+                            print(f" - {ymd(b.get('Zichtbaar'))} {b['Naam']} ; {uri}")
+                            if args.attachments and b["BronSoort"] != 3:
+                                bi = mg.req("leerlingen", kindid, "projecten", prj["Id"], "onderdelen", o["Id"], "bijlagen", b["Id"], {'redirect_type':'body'})
+                                print(bi['location'])
+
                     except urllib.error.HTTPError as e:
                         print(o['Titel'], e)
 
