@@ -166,7 +166,7 @@ class Magister:
         The other kind is not handled (yet), which stores the parts of the authcode
         string in separate variables and then using those vars instead of literal strings in the 'n' Array.
         """
-        if m := re.search(r'\([nr]=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
+        if m := re.search(r'\([nro]=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
             codes = m.group(1).split('","')
             idxes = [int(_) for _ in m.group(2).split('","')]
 
@@ -477,7 +477,7 @@ def getLink(props, name):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Magister info dump')
-    parser.add_argument('--debug', '-d', action='store_true', help='print all intermediate steps')
+    parser.add_argument('--debug', '-d', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--all', '-a', action='store_true', help='output all info')
     parser.add_argument('--cijfers', '-c', action='store_true', help='output cijfers')
     parser.add_argument('--allejaren', action='store_true', help='output cijfers of all years')
@@ -487,18 +487,18 @@ def main():
     parser.add_argument('--opdrachten', '-O', action='store_true', help='output opdrachten/activiteiten/projecten')
     parser.add_argument('--attachments', action='store_true', help='print links to attachments')
     parser.add_argument('--get', help='get data from magister')
-    parser.add_argument('--config', help='specify configuration file.')
-    parser.add_argument('--cache', help='specify the magister access-token cache file.')
+    parser.add_argument('--config', help=argparse.SUPPRESS) # 'specify configuration file.'
+    parser.add_argument('--cache', help=argparse.SUPPRESS)  # 'specify the magister access-token cache file.'
     parser.add_argument('--verbose', action='store_true')
 
     # 'internal' options.
-    parser.add_argument('--xsrftoken')
-    parser.add_argument('--accesstoken')
-    parser.add_argument('--username')
-    parser.add_argument('--password')
-    parser.add_argument("--authcode")
-    parser.add_argument('--schoolserver')
-    parser.add_argument('--magisterserver', default='accounts.magister.net')
+    parser.add_argument('--xsrftoken', help=argparse.SUPPRESS)
+    parser.add_argument('--accesstoken', help=argparse.SUPPRESS)
+    parser.add_argument('--username', help=argparse.SUPPRESS)
+    parser.add_argument('--password', help=argparse.SUPPRESS)
+    parser.add_argument("--authcode", help=argparse.SUPPRESS)
+    parser.add_argument('--schoolserver', help=argparse.SUPPRESS)
+    parser.add_argument('--magisterserver', default='accounts.magister.net', help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.all:
