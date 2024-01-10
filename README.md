@@ -51,6 +51,14 @@ Usage
       --magisterserver MAGISTERSERVER
 
 
+magisterlog
+===========
+
+`magisterlog.py` is a script to view how the magister contents change over time.
+
+For this to work, you will need to make regular dumps of all magister state, and store these in a `logs` directory.
+
+
 TODO
 ====
 
