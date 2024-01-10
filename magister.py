@@ -181,7 +181,7 @@ class Magister:
         Decode the javascript containing the oidc config.
         """
         cfg = dict()
-        for line in js.split("\r\n"):
+        for line in re.split(r'[\r\n]+', js):
             if not line: continue
             if m := re.match(r'\s*(\w+):\s*(.*),?$', line):
                 key, value = m.groups()
