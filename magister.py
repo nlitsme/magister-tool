@@ -11,13 +11,15 @@ def dehtml(html):
     """
     convert html to somewhat readable text.
     """
+    if html is None: return
+
     html = re.sub(r"</p>|<br>", "\n", html)
     html = re.sub(r"</td>\s*<td[^<>]*>", "\t", html)
     html = re.sub(r"</tr>", "\n", html)
     # special handling for <a href>: description first, then link.
-    html = re.sub(r"<a[^<>]*\shref=([^<> ]+)[^<>]*>([^<>]*)</\s*a\s*>", lambda m:m[2]+' '+m[1]+' ', html, re.DOTALL)
-    html = re.sub(r"<\w[^<>]*\shref=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, re.DOTALL)
-    html = re.sub(r"<\w[^<>]*\ssrc=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, re.DOTALL)
+    html = re.sub(r"<a[^<>]*\shref=([^<> ]+)[^<>]*>([^<>]*)</\s*a\s*>", lambda m:m[2]+' '+m[1]+' ', html, flags=re.DOTALL)
+    html = re.sub(r"<\w[^<>]*\shref=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, flags=re.DOTALL)
+    html = re.sub(r"<\w[^<>]*\ssrc=([^<> ]+)[^<>]*>", lambda m:m[1] + ' ', html, flags=re.DOTALL)
     html = re.sub(r"</?\w+[^<>]*>", "", html)
     html = re.sub(r"&nbsp;", " ", html)
     html = re.sub(r"\u00a0", " ", html)
@@ -25,8 +27,8 @@ def dehtml(html):
     html = re.sub(r"&lt;", "<", html)
     html = re.sub(r"&amp;", "&", html)
     # remove repeating links
-    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, re.DOTALL)
-    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, re.DOTALL)
+    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, flags=re.DOTALL)
+    html = re.sub(r"""['"]?(http\S+?)['"]?(?:\s+['"]?\1['"]?)+""", lambda m:m[1], html, flags=re.DOTALL)
     return html
 
 def datum(ts):
@@ -166,7 +168,7 @@ class Magister:
         The other kind is not handled (yet), which stores the parts of the authcode
         string in separate variables and then using those vars instead of literal strings in the 'n' Array.
         """
-        if m := re.search(r'\([nro]=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
+        if m := re.search(r'\(\w=\["([0-9a-f",]+?)"\],\["([0-9",]+)"\]\.map', js):
             codes = m.group(1).split('","')
             idxes = [int(_) for _ in m.group(2).split('","')]
 
@@ -344,12 +346,16 @@ class Magister:
 
 def printcijfers(c):
     print("-- cijfers --")
-    for item in c["items"]:
+    if msg := c.get('Message'):
+        print("Message:", msg)
+    for item in c.get("items", []):   # NOTE: lowercase 'items'  instead of the usual 'Items'
         print("%s - %-3s %-6s x %3.1f - %s" % (datum(item["ingevoerdOp"]), item["vak"]["code"], item["waarde"], item["weegfactor"], item["omschrijving"]))
 
 def printopdrachten(x):
     print("-- opdrachten --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         voor = datum(item["InleverenVoor"])
         op = datum(item["IngeleverdOp"])
         print("%-19s ; %-19s  ; %-4s - %s" % (voor, op, item["Vak"], item["Titel"]))
@@ -357,22 +363,30 @@ def printopdrachten(x):
 
 def printaanmeldingen(x):
     print("-- aanmeldingen --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         print("%s ; %s - (%s) %s" % (datum(item["Start"]), datum(item["Einde"]), item["Lesperiode"], item["Studie"]["Omschrijving"]))
 
 def printprojecten(x):
     print("-- projecten --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         print("%s ; %s - %s" % (datum(item["Van"]), datum(item["TotEnMet"]), item["Titel"]))
 
 def printabsenties(x):
     print("-- absentiesactiviteiten --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         print("%s ; %s - %s ; %s" % (datum(item["Start"]), datum(item["Eind"]), item["Omschrijving"], item["Afspraak"]["Omschrijving"]))
 
 def printactiviteiten(x):
     print("-- activiteiten --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         print("%s ; %s - %s" % (datum(item["ZichtbaarVanaf"]), datum(item["ZichtbaarTotEnMet"]), item["Titel"]))
 
 def infotstr(t):
@@ -382,7 +396,9 @@ def infotstr(t):
 
 def printafspraken(x):
     print("-- afspraken --")
-    for item in x["Items"]:
+    if msg := x.get('Message'):
+        print("Message:", msg)
+    for item in x.get("Items", []):
         """
         Type: 1:"Persoonlijk", 2:"Algemeen", 3:"Schoolbreed", 4:"Stage", 5:"Intake", 6:"Roostervrij", 7:"Kwt", 8:"Standby", 9:"Blokkade",
              10:"Overig", 11:"BlokkadeLokaal", 12:"BlokkadeKlas", 13:"Les", 14:"Studiehuis", 15:"RoostervrijeStudie", 16:"Planning",
@@ -397,7 +413,7 @@ def printafspraken(x):
 
 def printwijzigingen(x):
     print("-- roosterwijzigingen --")
-    for item in x["Items"]:
+    for item in x.get("Items", []):
         print("%s ; %s <%2s> %s ; %s" % (datum(item["Start"]), datum(item["Einde"]), infotstr(item["InfoType"]), item["Lokatie"], item["Omschrijving"]))
         if item["Inhoud"]:
             print(dehtml(item["Inhoud"]))
@@ -407,7 +423,7 @@ def printstudiewijzer(x):
 
 
 def print_jaar_cijfers(mg, v):
-    for item in v["items"]:
+    for item in v.get("Items", []):
         info = mg.getlink(item['links'].get('werkinformatie'))
         afgenomenop = info.get("afgenomenOp") if info else None
         weegfactor = info.get('weegfactor', '') if info else ''
@@ -564,7 +580,7 @@ def main():
         if args.cijfers:
             c = mg.req("personen", kindid, "cijfers", "laatste", dict(top=50))
             printcijfers(c)
-            if c["links"].get("voortgangscijfers"):   # --> 'aanmeldingen', meldid, 'cijfers'
+            if c.get("links", {}).get("voortgangscijfers"):   # --> 'aanmeldingen', meldid, 'cijfers'
                 v = mg.getlink(c["links"]["voortgangscijfers"])
                 print("-- voortgang --")
                 print_jaar_cijfers(mg, v)
@@ -593,43 +609,49 @@ def main():
             printwijzigingen(x)
 
         x = mg.req("personen", kindid, "mededelingen")
-        if x["mededelingen"]["items"]:
+        if x.get("mededelingen",{}).get("Items") or  x.get("mededelingen",{}).get("items"):
             print("md:", x)
 
         if args.studiewijzer:
             swlist = mg.req("leerlingen", kindid, "studiewijzers")
-            for sw in swlist["Items"]:
+            for sw in swlist.get("Items", []):
                 switem = mg.req("leerlingen", kindid, "studiewijzers", sw["Id"])
                 printstudiewijzer(switem)
                 for o in switem["Onderdelen"]["Items"]:
                     #note: 'o' contains the pre-de-htmlized description.
 
                     z = mg.req("leerlingen", kindid, "studiewijzers", sw["Id"], "onderdelen", o["Id"])
-                    print(f"{z['Titel']}\n{dehtml(z['Omschrijving'])}")
+                    if z.get('Fouttype'):
+                        print("ERROR", z)
+                        continue
+                    print(f"{z.get('Titel')}\n{dehtml(z.get('Omschrijving'))}")
                     for b in z["Bronnen"]:
-                        uri = b["Uri"] or f"attachment: {b['ContentType']}"
-                        print(f" - {ymd(b.get('Zichtbaar'))} {b['Naam']} ; {uri}")
+                        uri = b["Uri"] or f"attachment: {b.get('ContentType')}"
+                        print(f" - {ymd(b.get('Zichtbaar'))} {b.get('Naam')} ; {uri}")
                         if args.attachments and b["BronSoort"] != 3:
                             bi = mg.req("leerlingen", kindid, "studiewijzers", sw["Id"], "onderdelen", o["Id"], "bijlagen", b["Id"], {'redirect_type':'body'})
                             print(bi['location'])
                 print()
             prjlist = mg.req("leerlingen", kindid, "projecten")
-            for prj in prjlist["Items"]:
+            for prj in prjlist.get("Items", []):
                 prjdetail = mg.req("leerlingen", kindid, "projecten", prj["Id"])
                 print("-- projectwijzer ; %s ; %s - %s" % (datum(prj["Van"]), datum(prj["TotEnMet"]), prj["Titel"]))
                 for o in prjdetail["Onderdelen"]["Items"]:
                     try:
                         z = mg.req("leerlingen", kindid, "projecten", prj["Id"], "onderdelen", o["Id"], dict(gebruikMappenStructuur=True))
-                        print(f"{z['Titel']}\n{dehtml(z['Omschrijving'])}")
+                        if z.get('Fouttype'):
+                            print("ERROR", z)
+                            continue
+                        print(f"{z.get('Titel')}\n{dehtml(z.get('Omschrijving'))}")
                         for b in z["Bronnen"]:
-                            uri = b["Uri"] or f"attachment: {b['ContentType']}"
-                            print(f" - {ymd(b.get('Zichtbaar'))} {b['Naam']} ; {uri}")
+                            uri = b["Uri"] or f"attachment: {b.get('ContentType')}"
+                            print(f" - {ymd(b.get('Zichtbaar'))} {b.get('Naam')} ; {uri}")
                             if args.attachments and b["BronSoort"] != 3:
                                 bi = mg.req("leerlingen", kindid, "projecten", prj["Id"], "onderdelen", o["Id"], "bijlagen", b["Id"], {'redirect_type':'body'})
                                 print(bi['location'])
 
                     except urllib.error.HTTPError as e:
-                        print(o['Titel'], e)
+                        print(o.get('Titel'), e)
 
                 print()
 
