@@ -85,7 +85,14 @@ class Magister:
 
     def logprint(self, *args):
         if self.args.debug:
-            print(*args)
+            safe_args = []
+            for arg in args:
+                if isinstance(arg, str):
+                    # Verberg wachtwoorden en tokens in logs
+                    arg = re.sub(r'("password":\s*")[^"]*"', r'\1***"', arg)
+                    arg = re.sub(r'(access_token=)[^&\s]*', r'\1***', arg)
+                safe_args.append(arg)
+            print(*safe_args)
 
     def httpreq(self, url, data=None):
         """
@@ -296,8 +303,15 @@ class Magister:
 
         self.logprint("\n---- callback ----")
         url, html = self.httpredirurl(f"https://{self.magisterserver}" + r["redirectURL"])
+        print(">>> Redirect URL after login:", url)
 
+        if '#' not in url:
+            print("ERROR: Redirect URL does not contain a fragment (#). Login may have failed.")
+            print(f"URL was: {url}")
+            return False
         _, qs = url.split('#', 1)
+
+
         d = urllib.parse.parse_qs(qs)
         self.logprint(d)
         self.access_token = d["access_token"][0]
@@ -470,16 +484,34 @@ def apply_auth_config(cfg, args):
         return
     args.accesstoken = cfg.get('root', 'accesstoken')
 
-def store_access_token(cache, token):
-    now = datetime.now().astimezone()
-    f = token.split(".")
-    if len(f)>=2:
-        j = json.loads(binascii.a2b_base64(f[1]))
-        exp = datetime.fromtimestamp(j["exp"], tz=now.tzinfo)
-    else:
-        exp = now + timedelta(hours=1)
+def store_access_token(cache: str, token: str) -> None:
+    import base64
+    import json
+    from datetime import datetime, timezone, timedelta
 
-    exp = exp.astimezone(timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    def base64url_decode(input):
+        """Decode base64url (JWT-style) to bytes."""
+        if isinstance(input, str):
+            input = input.encode('ascii')
+        rem = len(input) % 4
+        if rem > 0:
+            input += b'=' * (4 - rem)  # add padding
+        return base64.b64decode(input.replace(b'-', b'+').replace(b'_', b'/'))
+
+    try:
+        f = token.split(".")
+        if len(f) >= 2:
+            # Decode the payload (f[1])
+            payload = base64url_decode(f[1])
+            j = json.loads(payload)
+            exp = datetime.fromtimestamp(j["exp"], tz=timezone.utc)
+        else:
+            exp = now + timedelta(hours=1)
+    except Exception as e:
+        print(f"Warning: could not parse token expiry: {e}")
+        exp = now + timedelta(hours=1)
 
     with open(cache, "w+") as fh:
         print(f"expires={exp:%Y-%m-%dT%H:%M:%SZ}", file=fh)
@@ -490,6 +522,7 @@ def getLink(props, name):
         if get(l, 'Rel') == name:
             return get(l, 'Href')
 
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Magister info dump')
@@ -497,7 +530,9 @@ def main():
     parser.add_argument('--all', '-a', action='store_true', help='output all info')
     parser.add_argument('--cijfers', '-c', action='store_true', help='output cijfers')
     parser.add_argument('--allejaren', action='store_true', help='output cijfers of all years')
-    parser.add_argument('--rooster', '-r', action='store_true', help='output rooster')
+    parser.add_argument('--rooster', '-r', action='store_true', help='output rooster (use --van and --tot for custom date range)')
+    parser.add_argument('--van', help='Start date for rooster/absenties (YYYY-MM-DD)')
+    parser.add_argument('--tot', help='End date for rooster/absenties (YYYY-MM-DD)')   
     parser.add_argument('--absenties', '-A', action='store_true', help='output absenties')
     parser.add_argument('--studiewijzer', '-s', action='store_true', help='output studiewijzer')
     parser.add_argument('--opdrachten', '-O', action='store_true', help='output opdrachten/activiteiten/projecten')
@@ -526,12 +561,12 @@ def main():
 
     if not args.config:
         import os
-        homedir = os.environ['HOME']
-        args.config = os.path.join(homedir, ".magisterrc")
+        from pathlib import Path
+        args.config = Path.home() / ".magisterrc"
     if not args.cache:
         import os
         homedir = os.environ['HOME']
-        args.cache = os.path.join(homedir, ".magister_auth_cache")
+        args.cache = Path.home() / ".magister_auth_cache"
 
     try:
         cfg = loadconfig(args.config)
@@ -553,7 +588,12 @@ def main():
         if not mg.login(args.username, args.password):
             print("Login failed")
             return
+        if not mg.access_token or mg.access_token == "":
+            print("Login appeared to succeed, but no access token was received.")
+            print("This usually means your school (trevianum.magister.net) no longer supports this login method.")
+            return
         store_access_token(args.cache, mg.access_token)
+
 
     if args.get is not None:
         d = mg.req(args.get)
@@ -598,15 +638,59 @@ def main():
         if args.absenties:
             x = mg.req("personen", kindid, "absentieperioden")
             print("ap:", x)
-            x = mg.req("personen", kindid, "absenties", dict(van=deltaymd(years=-8), tot=deltaymd(years=+1)))
+            abs_van = args.van if args.van else deltaymd(years=-8)
+            abs_tot = args.tot if args.tot else deltaymd(years=+1)
+            x = mg.req("personen", kindid, "absenties", dict(van=abs_van, tot=abs_tot))       
+
             printabsenties(x)
 
         if args.rooster:
-            x = mg.req("personen", kindid, "afspraken", dict(van=deltaymd(), tot=deltaymd(weeks=+3)))
-            printafspraken(x)
+            # Bepaal start- en einddatum
+            if args.van:
+                start_date = args.van
+                if args.tot:
+                    end_date = args.tot
+                else:
+                    d = datetime.strptime(args.van, "%Y-%m-%d")
+                    end_date = (d + timedelta(days=7)).strftime("%Y-%m-%d")
+            else:
+                start_date = deltaymd()
+                end_date = args.tot if args.tot else deltaymd(weeks=+3)
 
-            x = mg.req("personen", kindid, "roosterwijzigingen", dict(van=deltaymd(), tot=deltaymd(weeks=+3)))
-            printwijzigingen(x)
+            # Haal aanmeldingen op (al gedaan, maar hergebruik x)
+            # x is al gedefinieerd als: x = mg.req("personen", kindid, "aanmeldingen")
+            target_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            lesperiode = None
+            
+            for meld in x["Items"]:
+                if "Start" not in meld or "Eind" not in meld:
+                    continue
+                start_aanm = datetime.strptime(meld["Start"][:10], "%Y-%m-%d").date()
+                einde_aanm = datetime.strptime(meld["Eind"][:10], "%Y-%m-%d").date()
+                if start_aanm <= target_date <= einde_aanm:
+                    # Haal lesperiode uit "Omschrijving", bijv. "2526 G4 (NT)" → "2526"
+                    omschrijving = meld.get("Omschrijving", "")
+                    lesperiode = omschrijving.split()[0] if omschrijving else None
+                    break
+
+                if not lesperiode and x["Items"]:
+                    # Fallback: gebruik de laatste aanmelding
+                    omschrijving = x["Items"][-1].get("Omschrijving", "")
+                    lesperiode = omschrijving.split()[0] if omschrijving else None    
+
+
+            if not lesperiode and x["Items"]:
+                lesperiode = x["Items"][-1]["Lesperiode"]
+
+            params = dict(van=start_date, tot=end_date)
+            if lesperiode:
+                params["lesperiode"] = lesperiode
+
+            afspraken = mg.req("personen", kindid, "afspraken", params)
+            printafspraken(afspraken)
+
+            wijzigingen = mg.req("personen", kindid, "roosterwijzigingen", params)
+            printwijzigingen(wijzigingen)
 
         x = mg.req("personen", kindid, "mededelingen")
         if x.get("mededelingen",{}).get("Items") or  x.get("mededelingen",{}).get("items"):
