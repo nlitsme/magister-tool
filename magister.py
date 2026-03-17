@@ -5,7 +5,7 @@ import urllib.parse
 import http.cookiejar
 import json
 from datetime import datetime, timezone, timedelta
-import binascii
+import base64
 
 def dehtml(html):
     """
@@ -274,8 +274,8 @@ class Magister:
         # r.action == password  || 
         #                       || r.error = 'InvalidUsername'
         # r.username = ...      
-        if r['error']:
-            print("ERROR '%s'" % r['error'])
+        if r.get('error'):
+            print("ERROR '%s'" % r.get('error'))
             return
 
 
@@ -286,12 +286,15 @@ class Magister:
         # r.action == None    || r.action == "changepassword"  || r.action == None
         # r.redirectURL= ...  || r.redirectURL==None           || r.redirectURL==None
         #                                                      || r.error == "InvalidUsernameOrPassword"
+        if r.get('action') == "changepassword":
+            print("ERROR Magister wants you to change your password!!")
+            return
 
-        if not r['redirectURL'] or r['error']:
+        if not r['redirectURL'] or r.get('error'):
             if r['action']:
                 print("'%s' requested -> visit website" % r['action'])
                 return
-            print("ERROR '%s'" % r['error'])
+            print("ERROR '%s'" % r.get('error'))
             return
 
         self.logprint("\n---- callback ----")
@@ -474,7 +477,7 @@ def store_access_token(cache, token):
     now = datetime.now().astimezone()
     f = token.split(".")
     if len(f)>=2:
-        j = json.loads(binascii.a2b_base64(f[1]))
+        j = json.loads(base64.b64decode(f[1], altchars=b"-_"))
         exp = datetime.fromtimestamp(j["exp"], tz=now.tzinfo)
     else:
         exp = now + timedelta(hours=1)
