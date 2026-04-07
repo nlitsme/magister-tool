@@ -290,7 +290,7 @@ class Magister:
             print("ERROR Magister wants you to change your password!!")
             return
 
-        if not r['redirectURL'] or r.get('error'):
+        if not 'redirectURL' in r or r.get('error'):
             if r['action']:
                 print("'%s' requested -> visit website" % r['action'])
                 return
