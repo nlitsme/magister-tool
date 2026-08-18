@@ -6,6 +6,10 @@ Tool to quickly get an overview of all relevant information from your school's m
 Magister is a service used by many dutch schools through which both parents and students can access
 schedules, results, study programs etc.
 
+
+NOTE: my kids are no longer in school. i will not be using this tool anymore. so don't expect updates.
+
+
 Requirements
 ============
 
