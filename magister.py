@@ -53,9 +53,11 @@ def ymd(ts):
     return datum(ts)[:9]
 
 def utctime(ts):
+    # ts is of the format: '2018-07-31T22:00:00.0000000Z'
     if m := re.split(r"[-T:Z.]", ts):
-        y, m, d, H, M, S = map(int, m[:-1])
-        return datetime(y, m, d, H, M, S, tzinfo=timezone.utc)
+        ye, mo, da, H, M, S = map(int, m[:6])
+        us = int(m[6]) if len(m)>=6 and m[6] else 0
+        return datetime(ye, mo, da, H, M, S, us, tzinfo=timezone.utc)
 
 def deltaymd(years=0, days=0, weeks=0):
     t = datetime.now()
@@ -498,10 +500,6 @@ def store_access_token(cache, token):
         print(f"expires={exp:%Y-%m-%dT%H:%M:%SZ}", file=fh)
         print(f"accesstoken={token}", file=fh)
 
-def getLink(props, name):
-    for l in props.get("Links", []):
-        if get(l, 'Rel') == name:
-            return get(l, 'Href')
 
 def main():
     import argparse
@@ -537,13 +535,11 @@ def main():
         args.studiewijzer = True
         args.opdrachten = True
 
+    import os
+    homedir = os.environ['HOME']
     if not args.config:
-        import os
-        homedir = os.environ['HOME']
         args.config = os.path.join(homedir, ".magisterrc")
     if not args.cache:
-        import os
-        homedir = os.environ['HOME']
         args.cache = os.path.join(homedir, ".magister_auth_cache")
 
     try:
